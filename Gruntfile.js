@@ -5,7 +5,7 @@ module.exports = function(grunt) {
 		  main: {
 		    files: [
 		      // includes files within path
-		      {expand: true, src: ['fiddystore/*'], dest: '/Applications/XAMPP/xamppfiles/htdocs/FiddyStore/prestashop/modules/'},
+		      {expand: true, src: ['prestashop/**'], dest: '/Applications/XAMPP/xamppfiles/htdocs/FiddyStore/'},
 		    ]
 		  }
 		}
