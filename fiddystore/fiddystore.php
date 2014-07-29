@@ -7,7 +7,7 @@ class FiddyStore extends Module
 	public function __construct() 
 	{
 		$this->name = 'fiddystore';
-		$this->tab = 'administration';
+		$this->tab = '';
 		$this->version = '0.1';
 		$this->author = 'Isabel Züger';
 		$this->push_filename = _PS_CACHE_DIR_.'push/activity';
@@ -34,15 +34,14 @@ class FiddyStore extends Module
 	public function install()
 	{
 		$tab = new Tab();
-		$tab->active = 1;
 		foreach (Language::getLanguages() as $language)
             $tab->name[$language['id_lang']] = $this->l('Ladenverkauf'); 
-		$tab->class_name = 'AdminStoresellings';
+		$tab->class_name = 'StoreSellings';
 		$tab->module = 'fiddystore';
 		$tab->id_parent = 0; // Root tab
-		$result = $tab->add();
+		$tab->add();
 		
-		if(parent::install() == false || !$result || !$this->registerHook('displayBackOfficeHeader') || !Configuration::updateValue('FIDDYSTORE_NAME', 'Fiddy Store Plugin'))
+		if(parent::install() == false || !$this->registerHook('displayBackOfficeHeader') || !Configuration::updateValue('FIDDYSTORE_NAME', 'Fiddy Store Plugin'))
 			return false;
 		return true;
 	}
@@ -51,7 +50,7 @@ class FiddyStore extends Module
 	{
 		// uninstall DB
 		// Db::getInstance()->Execute('DELETE FROM `'._DB_PREFIX_.'mymodule`');
-		$tab = new Tab((int)Tab::getIdFromClassName('AdminStoresellings'));
+		$tab = new Tab((int)Tab::getIdFromClassName('StoreSellings'));
 		$tab->delete();
 		
 		if(!parent::uninstall() || !Configuration::deleteByName('FIDDYSTORE_NAME')) 
