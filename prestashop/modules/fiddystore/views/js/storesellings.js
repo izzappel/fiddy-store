@@ -1,92 +1,3 @@
-(function(global) {
-	var products = [],
-		total_price = 0;
-	
-	var addProduct = function(product) {
-		var i;
-		
-		for(i = 0; i < products.length; i++) {
-			if(products[i].id_product === product.id_product) {
-				products[i].amount++;
-				return products[i];
-			}
-		}
-		
-		product.amount = 1;
-		product.guid = generateUUID();
-		products.push(product);
-		return product;
-	};
-	
-	var removeProduct = function(guid) {
-		var i;
-		
-		for(i = 0; i < products.length; i++) {
-			if(products[i].guid === guid) {
-				products[i].amount--;
-				if(products[i].amount === 0) {
-					products.splice(i, 1);
-					return null;
-				}
-				return products[i];
-			}
-		}
-		
-		return null;
-	};
-	
-	var getProductByGuid = function(guid) {
-		var i;
-		
-		for(i = 0; i < products.length; i++) {
-			if(products[i].guid === guid) {
-				return products[i];
-			}
-		}
-		
-		return null;
-
-	};
-	
-	var getAmount = function() {
-		var i, amount = 0;
-		
-		for(i = 0; i < products.length; i++) {
-			amount += products[i].amount;
-		}
-		
-		return amount;
-	};
-	
-	var setTotalPrice = function(price) {
-		total_price = price;
-	};
-	
-	var getTotalPrice = function() {
-		return total_price;
-	};
-	
-	var generateUUID = function() {
-    	var d = new Date().getTime();
-	    var uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-	        var r = (d + Math.random()*16)%16 | 0;
-	        d = Math.floor(d/16);
-	        return (c=='x' ? r : (r&0x7|0x8)).toString(16);
-	    });
-	    return uuid;
-	};
-	
-	global.storesellings = global.storeselligs || {};
-	global.storesellings.addProduct = addProduct;
-	global.storesellings.removeProduct = removeProduct;
-	global.storesellings.getProductByGuid = getProductByGuid; 
-	global.storesellings.products = products;
-	global.storesellings.getAmount = getAmount;
-	global.storesellings.setTotalPrice = setTotalPrice;
-	global.storesellings.getTotalPrice = getTotalPrice;
-	
-})(window);
-
 var CONTROLLER = "AdminStoresellings";
 var URL = currentIndex + "&token=" + token;
 var ENTER_KEYCODE = 13;
@@ -105,12 +16,16 @@ var calculateDiscount = function(event) {
 	if(event.which === ENTER_KEYCODE) {
 		event.preventDefault();
 		
-		getTotalPrice();
+		setDiscount();
 	}
 };
 
 var searchProducts = function(event) {
-	var barcodeValue = $('input[name=barcode]').attr('value');
+	var barcodeValue = $('input[name=barcode]').attr('value'), 
+		attributes_html, 
+		data;
+	
+	$('input[name=barcode]').attr('value', '');
 	
 	event.preventDefault();
 	
@@ -119,93 +34,148 @@ var searchProducts = function(event) {
 		data : {
 			ajax : "1",
 			controller : CONTROLLER,
-			action : "searchProducts",
+			action : "addProduct",
 			barcode: barcodeValue
 		},
 		type: 'POST',
-		success : function(jsonData){
-			var data, product;
+		success : function(jsonData) {
+			ajaxSuccess(jsonData);
 			
 			data = JSON.parse(jsonData);
-			if(data.product) {
-				product = data.product;
-				
-				addProduct(product);
-			}
-		}	
+			
+			attributes_html = '<select class="id_product_attribute" id="ipa_' + data.product.id_product + '" name="ipa_' + data.product.id_product + '">';
+			$.each(data.product.combinations, function() {
+					attributes_html += '<option ' + (this.default_on == 1 ? 'selected="selected"' : '') + ' value="' + this.id_product_attribute + '">' + this.attributes + ' - ' + this.formatted_price + '</option>';
+					});
+			attributes_html += '</select>';
+			
+			$('.variante').html(attributes_html);
+		}
 	});
 };
 
-var getTotalPrice = function() {
-	var discountValue = $('input[name=discount]').attr('value');
-
+var sell = function() {
 	$.ajax({
 		url : URL,
 		data : {
 			ajax : "1",
 			controller : CONTROLLER,
-			action : "getTotalPrice",
-			products: storesellings.products,
-			discount: discountValue
+			action : "test"
 		},
 		type: 'POST',
 		success : function(jsonData){
-			var data;
-			
-			data = JSON.parse(jsonData);
-			if(data) {
-				updatePrice(data.total_price, data.price_for_products);
-			}
+			location.reload();
 		}	
 	});
 };
 
-var addProduct = function(product) {
-	var row;
-	
-	product = storesellings.addProduct(product);
-					
-	if($('#product_' + product.guid).length <= 0) {
-		row = "<tr id='product_" + product.guid + "'><td>" + product.id_product + "</td><td class='amount'> " + product.amount + "</td><td>" + product.ean13 + "</td><td>" + product.name + "</td><td>" + product.price_tax_incl + "</td><td><button type='button' class='btn btn-default' onclick='javascript:removeProduct(\"" + product.guid + "\")'>-</button>&nbsp;<button type='button' class='btn btn-default' onclick='javascript:multiplyProduct(\"" + product.guid + "\")'>+</button></tr>";
-		
-		$('#productList tbody').append(row);
-	} else {
-		row = $('#product_' + product.guid);
-		$('.amount', row).text(product.amount);
-	}
-	
-	getTotalPrice();
-};
-
-
-var multiplyProduct = function(guid) {
-	var product = storesellings.getProductByGuid(guid);
-	if(product !== null) {
-		addProduct(product);
-	} else {
-		console.log("product " + guid + " not found");
-	}
-};
-
-var removeProduct = function(guid) {
-	var product = storesellings.removeProduct(guid),
+var renderProducts = function(products) {
+	var tbody = $('#productList tbody'),
+		i, 
+		product,
 		row;
-	if(product !== null) {
-		row = $('#product_' + product.guid);
-		$('.amount', row).text(product.amount);
-	} else {
-		$('#product_' + guid).remove();
+		
+	tbody.html('');
+	for(i = 0; i < products.length; i++) {
+		product = products[i];
+		
+		row = "<tr id='product_" + product.id_product + "'><td>" + product.id_product + "</td><td><span class='badge'>" + product.cart_quantity + "</span></td><td>" + product.ean13 + "</td><td>" + product.name + "</td><td>" + formatCurrency(parseFloat(product.total_wt), currency_format, currency_sign, currency_blank)
+ + "</td><td><button type='button' class='btn btn-default' onclick='javascript:decreaseQuantity(\"" + product.id_product + "\")'>-</button>&nbsp;<button type='button' class='btn btn-default' onclick='javascript:increaseQuantity(\"" + product.id_product + "\")'>+</button></td></tr>";
+		
+		tbody.append(row);
 	}
-	
-	getTotalPrice();
 };
 
-var updatePrice = function(total_price, price_for_products) {
-	if(price_for_products) {
-		$('#productList .info').html('<td>&nbsp;</td><td>' + storesellings.getAmount() + '</td><td>&nbsp;</td><td>&nbsp;</td><td>' + price_for_products + '</td><td>&nbsp;</td>');
+var renderTotalPrice = function(total_price) {
+	var priceElement = $('#total');
+	
+	priceElement.html('<p>' + formatCurrency(parseFloat(total_price), currency_format, currency_sign, currency_blank) + '</p>');	
+};
+
+
+var renderDiscounts = function(discounts) {
+	var tbody = $('#discountsList tbody'),
+		i, 
+		discount,
+		row;
+		
+	tbody.html('');
+	for(i = 0; i < discounts.length; i++) {
+		discount = discounts[i];
+		
+		row = "<tr id='discount_" + discount.id_cart_rule + "'><td>" + discount.name + "</td><td>" + formatCurrency(parseFloat(discount.reduction_amount), currency_format, currency_sign, currency_blank) + "</td><td><button type='button' class='btn btn-default' onclick='javascript:removeDiscount(\"" + discount.id_cart_rule + "\")'>Entfernen</button></td></tr>";
+		
+		tbody.append(row);
 	}
-	if(total_price) {
-		$('#total').html('<p>' + total_price + '</p>');
+};
+
+var increaseQuantity = function(id_product) {
+	$.ajax({
+		url : URL,
+		data : {
+			ajax : "1",
+			controller : CONTROLLER,
+			action : "increaseQuantity",
+			id_product: id_product
+		},
+		type: 'POST',
+		success : ajaxSuccess	
+	});
+};
+
+var decreaseQuantity = function(id_product) {
+	$.ajax({
+		url : URL,
+		data : {
+			ajax : "1",
+			controller : CONTROLLER,
+			action : "decreaseQuantity",
+			id_product: id_product
+		},
+		type: 'POST',
+		success : ajaxSuccess	
+	});
+};
+
+var setDiscount = function() {
+	var discount = $('#discount').val();
+	
+	$.ajax({
+		url : URL,
+		data : {
+			ajax : "1",
+			controller : CONTROLLER,
+			action : "setDiscount",
+			discount: discount
+		},
+		type: 'POST',
+		success : ajaxSuccess	
+	});
+};
+
+var removeDiscount = function(id_cart_rule) {
+	$.ajax({
+		url : URL,
+		data : {
+			ajax : "1",
+			controller : CONTROLLER,
+			action : "removeDiscount",
+			id_cart_rule: id_cart_rule
+		},
+		type: 'POST',
+		success : ajaxSuccess	
+	});
+};
+
+var ajaxSuccess = function(jsonData) {
+	var data, products;
+	
+	data = JSON.parse(jsonData);
+	if(data.products) {
+		products = data.products;
+		renderProducts(products);
+		renderTotalPrice(data.total_price);
+		renderDiscounts(data.discounts);
 	}
 };
 
@@ -213,4 +183,5 @@ $(document).ready( function () {
 	$('#searchProductsButton').click(searchProducts);
 	$('input[name=barcode]').on('keydown', invokeSearchProductsRequest);
 	$('input[name=discount]').on('keydown', calculateDiscount);
+	$('#closeCart').click(sell);
 });
