@@ -19,11 +19,12 @@ class AdminStoresellingsController extends ModuleAdminController
     
     public function setMedia()
 	{	
+		parent::setMedia();
+		
+		$this->addJqueryPlugin('typewatch');
+		
 		$this->addJS(_MODULE_DIR_.$this->module->name.'/views/js/storesellings.js');
-		$this->addCSS(_MODULE_DIR_.$this->module->name.'/views/css/storesellings.css');
-
-		return parent::setMedia();
-	}
+		$this->addCSS(_MODULE_DIR_.$this->module->name.'/views/css/storesellings.css');	}
 
 	public function initContent()
     {
@@ -73,17 +74,30 @@ class AdminStoresellingsController extends ModuleAdminController
 	{
 		$barcode = Tools::getValue('barcode');
 		$product = $this->getProductByBarcode($barcode);
-		//$this->addProductToCart($product['id_product']);
+		$added = false;
+		
+		if(isset($product['selected_combination']) || $product['combinations'] == []) 
+		{
+			$this->addProductToCart($product['id_product'], $product['selected_combination']['id_product_attribute']);
+			$added = true;
+		}
 		
 		$return = $this->createReturnValue();
 		$return['product'] = $product;
+		$return['added'] = $added;
 		die(Tools::jsonEncode($return));
 	}
 	
 	public function ajaxProcessIncreaseQuantity()
 	{
 		$id_product = Tools::getValue('id_product');
-		$this->addProductToCart($id_product);
+		$id_product_attribute = Tools::getValue('id_product_attribute');
+
+		if(isset($id_product_attribute) && $id_product_attribute != '0') {
+			$this->addProductToCart($id_product, $id_product_attribute);
+		} else {
+			$this->addProductToCart($id_product);
+		}
 		
 		$return = $this->createReturnValue();
 		die(Tools::jsonEncode($return));
@@ -92,7 +106,13 @@ class AdminStoresellingsController extends ModuleAdminController
 	public function ajaxProcessDecreaseQuantity()
 	{
 		$id_product = Tools::getValue('id_product');
-		$this->removeProductFromCart($id_product);
+		$id_product_attribute = Tools::getValue('id_product_attribute');
+		
+		if(isset($id_product_attribute) && $id_product_attribute != '0') {
+			$this->removeProductFromCart($id_product, $id_product_attribute);
+		} else {
+			$this->removeProductFromCart($id_product);
+		}
 		
 		$return = $this->createReturnValue();
 		die(Tools::jsonEncode($return));
@@ -125,48 +145,93 @@ class AdminStoresellingsController extends ModuleAdminController
 		die(Tools::jsonEncode($return));
 	}
 	
-	private function getProduct($product) {
+	private function appendProductCombinations($product) {
 		$productObj = new Product((int)$product['id_product'], false, (int)$this->context->language->id);
 		
 		$combinations = array();
 		$attributes = $productObj->getAttributesGroups((int)$this->context->language->id);
-		
+			
 		foreach ($attributes as $attribute)
 		{
+			$product_attribute = $this->getProductAttribute($attribute['id_product_attribute'])[0];
+			
 			if (!isset($combinations[$attribute['id_product_attribute']]['attributes']))
+			{
 				$combinations[$attribute['id_product_attribute']]['attributes'] = '';
+			}
+			
 			$combinations[$attribute['id_product_attribute']]['attributes'] .= $attribute['attribute_name'].' - ';
 			$combinations[$attribute['id_product_attribute']]['id_product_attribute'] = $attribute['id_product_attribute'];
 			$combinations[$attribute['id_product_attribute']]['default_on'] = $attribute['default_on'];
+			
 			if (!isset($combinations[$attribute['id_product_attribute']]['price']))
 			{
 				$price_tax_incl = Product::getPriceStatic((int)$product['id_product'], true, $attribute['id_product_attribute']);
 				$price_tax_excl = Product::getPriceStatic((int)$product['id_product'], false, $attribute['id_product_attribute']);
 				$combinations[$attribute['id_product_attribute']]['price_tax_incl'] = Tools::ps_round(Tools::convertPrice($price_tax_incl, $currency), 2);
 				$combinations[$attribute['id_product_attribute']]['price_tax_excl'] = Tools::ps_round(Tools::convertPrice($price_tax_excl, $currency), 2);
-				$combinations[$attribute['id_product_attribute']]['formatted_price'] = Tools::displayPrice(Tools::convertPrice($price_tax_excl, $currency), $currency);
+				$combinations[$attribute['id_product_attribute']]['formatted_price'] = Tools::displayPrice(Tools::convertPrice($price_tax_excl, $currency), $currency);				
 			}
+			
 			if (!isset($combinations[$attribute['id_product_attribute']]['qty_in_stock']))
-				$combinations[$attribute['id_product_attribute']]['qty_in_stock'] = StockAvailable::getQuantityAvailableByProduct((int)$product['id_product'], $attribute['id_product_attribute'], (int)$this->context->shop->id);
+			{				
+				$combinations[$attribute['id_product_attribute']]['qty_in_stock'] = StockAvailable::getQuantityAvailableByProduct((int)$product['id_product'],$attribute['id_product_attribute'], (int)$this->context->shop->id);
+			}
+			
+			$combinations[$attribute['id_product_attribute']]['ean13'] = $product_attribute['ean13'];
+
 		}
 
 		foreach ($combinations as &$combination)
+		{
 			$combination['attributes'] = rtrim($combination['attributes'], ' - ');
+		}
+		
 		$product['combinations'] = $combinations;
 		
 		return $product;
 	}
 	
 	
+	private function getProductAttribute($id_product_attribute) {
+		return Db::getInstance(_PS_USE_SQL_SLAVE_)->executeS('
+			SELECT pa.*
+			FROM '._DB_PREFIX_.'product_attribute pa
+			WHERE pa.id_product_attribute='.(int)$id_product_attribute);
+	}
+	
 	private function createReturnValue() {
 		$cart = $this->getCart();
 		$total_price = (float)Tools::ps_round((float)$cart->getOrderTotal(true), 2);
-				
+		
+		$products = $cart->getProducts();
+		
+		foreach ($products as $k => &$product)
+		{
+			$image = array();
+			if (isset($product['id_product_attribute']) && (int)$product['id_product_attribute'])
+				$image = Db::getInstance()->getRow('SELECT id_image
+																FROM '._DB_PREFIX_.'product_attribute_image
+																WHERE id_product_attribute = '.(int)$product['id_product_attribute']);
+			if (!isset($image['id_image']))
+				$image = Db::getInstance()->getRow('SELECT id_image
+																FROM '._DB_PREFIX_.'image
+																WHERE id_product = '.(int)$product['id_product'].' AND cover = 1');
+	
+			$product['qty_in_stock'] = StockAvailable::getQuantityAvailableByProduct($product['id_product'], isset($product['id_product_attribute']) ? $product['id_product_attribute'] : null, (int)$cart->id_shop);
+			
+			$product_obj = new Product($product['id_product']);
+	
+			$image_product = new Image($image['id_image']);
+			
+			$product['image'] = (isset($image['id_image']) ? ImageManager::thumbnail(_PS_IMG_DIR_.'p/'.$image_product->getExistingImgPath().'.jpg', 'product_mini_'.(int)$product['id_product'].(isset($product['id_product_attribute']) ? '_'.(int)$product['id_product_attribute'] : '').'.jpg', 45, 'jpg') : '--');
+		}
+		
 		$return = array(
 			'total_price' => $total_price,
 			'cart' => $cart,
 			'discounts' => $cart->getCartRules(),
-			'products' => $cart->getProducts()
+			'products' => $products
 		);
 		
 		return $return;
@@ -179,7 +244,23 @@ class AdminStoresellingsController extends ModuleAdminController
 		$matching_products = Product::searchByName($id_lang, $barcode);
 		if(count($matching_products) > 0) 
 		{
-			return $this->getProduct($matching_products[0]);
+			$product = $matching_products[0];
+			
+			$product = $this->appendProductCombinations($product);
+			
+			if($product['ean13'] == $barcode) {
+				return $product;
+			}
+			
+			foreach ($product['combinations'] as $combination) {
+				if($combination['ean13'] == $barcode) {
+					$product['selected_combination'] = $combination;
+					$product['id_product_attribute'] = $combination['id_product_attribute'];
+					break;
+				}
+			}
+		
+			return $product;
 		}
 		return null;
 	}
@@ -191,16 +272,16 @@ class AdminStoresellingsController extends ModuleAdminController
 		return $total_price;
 	}
 	
-	private function addProductToCart($id_product) {
+	private function addProductToCart($id_product, $id_product_attribute = null) {
 		$cart = $this->getCart();
 		
-		$cart->updateQty(1, $id_product);
+		$cart->updateQty(1, $id_product, $id_product_attribute);
 	}
 	
-	private function removeProductFromCart($id_product) {
+	private function removeProductFromCart($id_product, $id_product_attribute = null) {
 		$cart = $this->getCart();
 
-		$cart->updateQty(1, $id_product, null, false, 'down');	
+		$cart->updateQty(1, $id_product, $id_product_attribute, false, 'down');	
 	}
 	
 	private function removeDiscount($id_cart_rule) {

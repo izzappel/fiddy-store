@@ -5,7 +5,7 @@ var ENTER_KEYCODE = 13;
 var invokeSearchProductsRequest = function(event) {
 	if(event.which === ENTER_KEYCODE) {
 		event.preventDefault();
-    	searchProducts(event);
+    	searchProducts();
     }
 };
 
@@ -20,14 +20,12 @@ var calculateDiscount = function(event) {
 	}
 };
 
-var searchProducts = function(event) {
+var searchProducts = function() {
 	var barcodeValue = $('input[name=barcode]').attr('value'), 
 		attributes_html, 
 		data;
 	
 	$('input[name=barcode]').attr('value', '');
-	
-	event.preventDefault();
 	
 	$.ajax({
 		url : URL,
@@ -43,15 +41,43 @@ var searchProducts = function(event) {
 			
 			data = JSON.parse(jsonData);
 			
-			attributes_html = '<select class="id_product_attribute" id="ipa_' + data.product.id_product + '" name="ipa_' + data.product.id_product + '">';
-			$.each(data.product.combinations, function() {
-					attributes_html += '<option ' + (this.default_on == 1 ? 'selected="selected"' : '') + ' value="' + this.id_product_attribute + '">' + this.attributes + ' - ' + this.formatted_price + '</option>';
-					});
-			attributes_html += '</select>';
-			
-			$('.variante').html(attributes_html);
+			if(!data.added) {
+				attributes_html = '<select class="id_product_attribute" name="id_product_attribute" data-productid="' + data.product.id_product + '">';
+				
+				$.each(data.product.combinations, function() {
+							attributes_html += '<option ' + (this.default_on == 1 ? 'selected="selected"' : '') + ' value="' + this.id_product_attribute + '">' + this.attributes + ' - ' + this.formatted_price + '</option>';
+						});
+						
+				attributes_html += '</select>';
+				
+				$('.variante').html(attributes_html);
+			}
 		}
 	});
+};
+
+var addProduct = function(event) {
+	var id_product = $('select[name=id_product_attribute]').data('productid'), 
+		id_product_attribute = $('select[name=id_product_attribute]').val();
+
+	if(typeof id_product !== 'undefined' && typeof id_product_attribute !== 'undefined') {
+		$.ajax({
+			url : URL,
+			data : {
+				ajax : "1",
+				controller : CONTROLLER,
+				action : "increaseQuantity",
+				id_product: id_product,
+				id_product_attribute: id_product_attribute
+			},
+			type: 'POST',
+			success : function(jsonData) {
+				ajaxSuccess(jsonData);
+				$('.variante').html('<select></select>');
+			}
+	
+		});
+	}
 };
 
 var sell = function() {
@@ -79,8 +105,9 @@ var renderProducts = function(products) {
 	for(i = 0; i < products.length; i++) {
 		product = products[i];
 		
-		row = "<tr id='product_" + product.id_product + "'><td>" + product.id_product + "</td><td><span class='badge'>" + product.cart_quantity + "</span></td><td>" + product.ean13 + "</td><td>" + product.name + "</td><td>" + formatCurrency(parseFloat(product.total_wt), currency_format, currency_sign, currency_blank)
- + "</td><td><button type='button' class='btn btn-default' onclick='javascript:decreaseQuantity(\"" + product.id_product + "\")'>-</button>&nbsp;<button type='button' class='btn btn-default' onclick='javascript:increaseQuantity(\"" + product.id_product + "\")'>+</button></td></tr>";
+		row = "<tr><td>" + product.image + "</td><td>" + product.ean13 + "</td><td>" + product.name + (typeof product.attributes_small != 'undefined' ? " - " + product.attributes_small : "") + "</td><td>" + formatCurrency(parseFloat(product.price_wt), currency_format, currency_sign, currency_blank)
+ + "</td><td><span class='badge'>" + product.cart_quantity + "</span></td><td>" + product.qty_in_stock + "</td><td>" + formatCurrency(parseFloat(product.total_wt), currency_format, currency_sign, currency_blank)
+ + "</td><td><button type='button' class='btn btn-default' onclick='javascript:decreaseQuantity(" + product.id_product + (product.id_product_attribute != '0' ? ", " + product.id_product_attribute : "") + ")'>-</button>&nbsp;<button type='button' class='btn btn-default' onclick='javascript:increaseQuantity(" + product.id_product + (product.id_product_attribute != '0' ? ", " + product.id_product_attribute : "") + ")'>+</button></td></tr>";
 		
 		tbody.append(row);
 	}
@@ -103,34 +130,36 @@ var renderDiscounts = function(discounts) {
 	for(i = 0; i < discounts.length; i++) {
 		discount = discounts[i];
 		
-		row = "<tr id='discount_" + discount.id_cart_rule + "'><td>" + discount.name + "</td><td>" + formatCurrency(parseFloat(discount.reduction_amount), currency_format, currency_sign, currency_blank) + "</td><td><button type='button' class='btn btn-default' onclick='javascript:removeDiscount(\"" + discount.id_cart_rule + "\")'>Entfernen</button></td></tr>";
+		row = "<tr><td>" + discount.name + "</td><td>" + formatCurrency(parseFloat(discount.reduction_amount), currency_format, currency_sign, currency_blank) + "</td><td><button type='button' class='btn btn-default' onclick='javascript:removeDiscount(\"" + discount.id_cart_rule + "\")'>Entfernen</button></td></tr>";
 		
 		tbody.append(row);
 	}
 };
 
-var increaseQuantity = function(id_product) {
+var increaseQuantity = function(id_product, id_product_attribute) {
 	$.ajax({
 		url : URL,
 		data : {
 			ajax : "1",
 			controller : CONTROLLER,
 			action : "increaseQuantity",
-			id_product: id_product
+			id_product: id_product,
+			id_product_attribute: id_product_attribute
 		},
 		type: 'POST',
 		success : ajaxSuccess	
 	});
 };
 
-var decreaseQuantity = function(id_product) {
+var decreaseQuantity = function(id_product, id_product_attribute) {
 	$.ajax({
 		url : URL,
 		data : {
 			ajax : "1",
 			controller : CONTROLLER,
 			action : "decreaseQuantity",
-			id_product: id_product
+			id_product: id_product,
+			id_product_attribute: id_product_attribute
 		},
 		type: 'POST',
 		success : ajaxSuccess	
@@ -184,4 +213,12 @@ $(document).ready( function () {
 	$('input[name=barcode]').on('keydown', invokeSearchProductsRequest);
 	$('input[name=discount]').on('keydown', calculateDiscount);
 	$('#closeCart').click(sell);
+	$('#addProductAttribute').click(addProduct);
+	
+	$('input[name=barcode]').typeWatch({
+		captureLength: 1,
+		highlight: true,
+		wait: 300,
+		callback: function(){ searchProducts(); }
+	});
 });

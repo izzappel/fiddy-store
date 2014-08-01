@@ -6,7 +6,7 @@
 </script>
 
 <div class="panel">	
-	<div class="form-group">
+	<div class="row top-spacer">
 		<div class="col-lg-3">
 			<label for="product">Produkt</label>
 		</div>
@@ -15,40 +15,55 @@
 		</div>
 	</div>
 	
-	<div class="form-group">
+	<div class="row top-spacer">
 		<div class="col-lg-3">
 			<label for="product">Variante</label>
 		</div>
 		<div class="col-lg-9 variante">
-			
+			<select></select>
+		</div>
+	</div>
+	
+	<div class="row top-spacer">
+		<div class="col-lg-offset-3 col-lg-9">
+			<button type='button' class="btn btn-primary" id="addProductAttribute">Hinzufügen</button>
 		</div>
 	</div>
 	
 	
-	
-	<div id="productList">	
+	<div id="productList" class="top-spacer">	
 		<table class="table">
 			<thead>
 				<tr>
-					<th>Id</th>
-					<th>Anzahl</th>
+					<th>&nbsp;</th>
 					<th>Barcode</th>
-					<th>Produkt</th>
-					<th>Preis</th>
+					<th>Artikel</th>
+					<th>
+						<span class="title_box">Einzelpreis</span>
+						<small class="text-muted">inkl. MwSt.</small>
+					</th>
+					<th>Anz.</th>
+					<th>Verfügbare Menge</th>
+					<th>
+						<span class="title_box">Gesamt</span>
+						<small class="text-muted">inkl. MwSt.</small>
+					</th>
 					<th>+/-</th>
 				</tr>
 			</thead>
 			<tbody>
 			{foreach from=$products item=p}
 			    <tr>
-			    	<td>{$p['id_product']}</td>
-					<td><span class="badge">{$p['cart_quantity']}</span></td>
+			    	<td>{$p['image']}</td>
 					<td>{$p['ean13']}</td>
-					<td>{$p['name']}</td>
+					<td>{$p['name']}{if isset($p['attributes_small'])} - {$p['attributes_small']}{/if}</td>
+					<td>{displayPrice price=$p['price_wt'] currency=$currency->id}</td>
+					<td><span class="badge">{$p['cart_quantity']}</span></td>
+					<td>{$p['qty_in_stock']}</td>
 					<td>{displayPrice price=$p['total_wt'] currency=$currency->id}</td>
 					<td>
-						<button type='button' class='btn btn-default' onclick='javascript:decreaseQuantity({$p.id_product})'>-</button>&nbsp;
-						<button type='button' class='btn btn-default' onclick='javascript:increaseQuantity({$p.id_product})'>+</button>
+						<button type='button' class='btn btn-default' onclick='javascript:decreaseQuantity({$p['id_product']}{if $p['id_product_attribute'] != 0}, {$p['id_product_attribute']}{/if})'>-</button>&nbsp;
+						<button type='button' class='btn btn-default' onclick='javascript:increaseQuantity({$p['id_product']}{if $p['id_product_attribute'] != 0}, {$p['id_product_attribute']}{/if})'>+</button>
 					</td>
 			    </tr>
 			    		
