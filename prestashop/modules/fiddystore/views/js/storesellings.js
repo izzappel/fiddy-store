@@ -25,8 +25,6 @@ var searchProducts = function() {
 		attributes_html, 
 		data;
 	
-	$('input[name=barcode]').attr('value', '');
-	
 	$.ajax({
 		url : URL,
 		data : {
@@ -41,7 +39,12 @@ var searchProducts = function() {
 			
 			data = JSON.parse(jsonData);
 			
-			if(!data.added) {
+			if(data.added) {
+				$('input[name=barcode]').attr('value', '');
+			}
+			
+			if(!data.added && data.product) {
+				$('.selectedProduct').html(data.product.name);
 				attributes_html = '<select class="id_product_attribute" name="id_product_attribute" data-productid="' + data.product.id_product + '">';
 				
 				$.each(data.product.combinations, function() {
@@ -73,6 +76,8 @@ var addProduct = function(event) {
 			type: 'POST',
 			success : function(jsonData) {
 				ajaxSuccess(jsonData);
+				$('input[name=barcode]').attr('value', '');
+				$('.selectedProduct').html("");
 				$('.variante').html('<select></select>');
 			}
 	
@@ -81,18 +86,24 @@ var addProduct = function(event) {
 };
 
 var sell = function() {
-	$.ajax({
-		url : URL,
-		data : {
-			ajax : "1",
-			controller : CONTROLLER,
-			action : "test"
-		},
-		type: 'POST',
-		success : function(jsonData){
-			location.reload();
-		}	
-	});
+	if($('#productList tbody tr').length <= 0) {
+		return;
+	}
+
+	if (confirm('Diesen Kauf abschliessen?')) {
+		$.ajax({
+			url : URL,
+			data : {
+				ajax : "1",
+				controller : CONTROLLER,
+				action : "test"
+			},
+			type: 'POST',
+			success : function(jsonData){
+				location.reload();
+			}	
+		});
+	}
 };
 
 var renderProducts = function(products) {
@@ -130,7 +141,7 @@ var renderDiscounts = function(discounts) {
 	for(i = 0; i < discounts.length; i++) {
 		discount = discounts[i];
 		
-		row = "<tr><td>" + discount.name + "</td><td>" + formatCurrency(parseFloat(discount.reduction_amount), currency_format, currency_sign, currency_blank) + "</td><td><button type='button' class='btn btn-default' onclick='javascript:removeDiscount(\"" + discount.id_cart_rule + "\")'>Entfernen</button></td></tr>";
+		row = "<tr><td>" + discount.name + "</td><td>" + (discount.reduction_amount != 0 ? formatCurrency(parseFloat(discount.reduction_amount), currency_format, currency_sign, currency_blank) : discount.reduction_percent + "%") + "</td><td>" + formatCurrency(parseFloat(discount.value_real), currency_format, currency_sign, currency_blank) + "</td><td><button type='button' class='btn btn-default' onclick='javascript:removeDiscount(\"" + discount.id_cart_rule + "\")'>Entfernen</button></td></tr>";
 		
 		tbody.append(row);
 	}
@@ -182,6 +193,24 @@ var setDiscount = function() {
 	});
 };
 
+var setOrderState = function() {
+	var id_order_state = $('#order_states').val();
+	
+	$.ajax({
+		url : URL,
+		data : {
+			ajax : "1",
+			controller : CONTROLLER,
+			action : "setOrderState",
+			id_order_state: id_order_state
+		},
+		type: 'POST',
+		success : function() {
+			location.reload();
+		}	
+	});
+};
+
 var removeDiscount = function(id_cart_rule) {
 	$.ajax({
 		url : URL,
@@ -214,6 +243,7 @@ $(document).ready( function () {
 	$('input[name=discount]').on('keydown', calculateDiscount);
 	$('#closeCart').click(sell);
 	$('#addProductAttribute').click(addProduct);
+	$('#order_states').change(setOrderState);
 	
 	$('input[name=barcode]').typeWatch({
 		captureLength: 1,
@@ -221,4 +251,53 @@ $(document).ready( function () {
 		wait: 300,
 		callback: function(){ searchProducts(); }
 	});
+		
+	$("#user").autocomplete(URL,
+		{
+			minChars: 3,
+			max: 10,
+			width: 500,
+			selectFirst: false,
+			scroll: false,
+			dataType: "json",
+			highlightItem: true,
+			formatItem: function(data, i, max, value, term) {
+				return value;
+			},
+			parse: function(data) {
+				var customers = new Array();
+				if (typeof(data.customers) !== 'undefined') {
+					for (var i = 0; i < data.customers.length; i++) {
+						customers[i] = { data: data.customers[i], value: data.customers[i].firstname + " " + data.customers[i].lastname };
+					}
+				}
+				return customers;
+			},
+			extraParams: {
+				ajax: true,
+				token: token,
+				action: 'searchCustomers',
+				customer_search: function() { return $('#user').val(); }
+			}
+		}
+	)
+	.result(function(event, data, formatted) {
+		if (data)
+		{
+			$.ajax({
+				url : URL,
+				data : {
+					ajax : "1",
+					controller : CONTROLLER,
+					action : "setCustomer",
+					customer: data
+				},
+				type: 'POST',
+				success : function(jsonData) {
+					location.reload();
+				}	
+			});
+		}
+	});
+
 });

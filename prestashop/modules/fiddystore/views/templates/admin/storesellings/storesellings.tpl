@@ -5,6 +5,35 @@
 	var priceDisplayPrecision = 2;
 </script>
 
+<div class="panel">
+	<div class="row top-spacer">
+		<div class="col-lg-3">
+			<label for="user">Benutzer</label>
+		</div>
+		<div class="col-lg-9">
+			<div class="input-group">
+				<input type="text" id="user" value=""/>
+				<div class="input-group-addon">
+					<i class="icon-search"></i>
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="row">
+		<div class="col-lg-offset-3 col-lg-3">
+			<div class="panel top-spacer">
+				<div class="panel-heading">
+					Benutzer
+				</div>
+				<span>
+					<strong>{$customer->firstname} {$customer->lastname}</strong>, {$customer->email}
+					<span class="pull-right">#{$customer->id}</span>
+				</span>
+			</div>
+		</div>
+	</div>
+</div>
+
 <div class="panel">	
 	<div class="row top-spacer">
 		<div class="col-lg-3">
@@ -12,6 +41,12 @@
 		</div>
 		<div class="col-lg-9">
 			<input type="text" name="barcode" />
+		</div>
+	</div>
+	
+	<div class="row top-spacer">
+		<div class="col-lg-offset-3 col-lg-9">
+			<span class="selectedProduct"></span>
 		</div>
 	</div>
 	
@@ -89,6 +124,7 @@
 			<thead>
 				<tr>
 					<th>Bezeichnung</th>
+					<th>Rabatt</th>
 					<th>Wert</th>
 					<th>Entfernen</th>
 				</tr>
@@ -97,7 +133,12 @@
 			{foreach from=$discounts item=d}
 			    <tr>
 			    	<td>{$d['name']}</td>
+			    	{if $d['reduction_amount'] != 0}
 					<td>{displayPrice price=$d['reduction_amount'] currency=$currency->id}</td>
+					{else}
+					<td>{$d['reduction_percent']}%</td>
+					{/if}
+					<td>{displayPrice price=$d['value_real'] currency=$currency->id}</td>
 					<td>
 						<button type='button' class='btn btn-default' onclick='javascript:removeDiscount({$d['id_cart_rule']})'>Entfernen</button>
 					</td>
@@ -108,15 +149,28 @@
 	</div>
 </div>
 <div class="panel">
+
 	<div class="row top-spacer">
 		<div class="col-lg-9">
-			<p>Total</p>
+			<p>Status</p>
+		</div>
+		<div class="col-lg-3">
+			<select id="order_states">
+			{foreach from=$order_states item=s}
+			    <option value="{$s['id_order_state']}" {if $order_state == $s['id_order_state']} selected {/if}>{$s['name']}</option>
+			{/foreach}
+			</select>
+		</div>
+	</div>
+	
+	<div class="row top-spacer">
+		<div class="col-lg-9">
+			<p><strong>Total</strong></p>
 		</div>
 		<div class="col-lg-3" id="total">
 			<p><span class='label label-success'>{displayPrice price=$total_price currency=$currency->id}</span></p>
 		</div>
 	</div>
-	
 	
 	<div class="row top-spacer">
 		<div class="col-lg-offset-9 col-lg-3">

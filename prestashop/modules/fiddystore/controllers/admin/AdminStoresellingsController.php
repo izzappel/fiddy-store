@@ -21,7 +21,7 @@ class AdminStoresellingsController extends ModuleAdminController
 	{	
 		parent::setMedia();
 		
-		$this->addJqueryPlugin('typewatch');
+		$this->addJqueryPlugin(array('autocomplete', 'typewatch'));
 		
 		$this->addJS(_MODULE_DIR_.$this->module->name.'/views/js/storesellings.js');
 		$this->addCSS(_MODULE_DIR_.$this->module->name.'/views/css/storesellings.css');	}
@@ -64,10 +64,38 @@ class AdminStoresellingsController extends ModuleAdminController
 
 		$return = $this->createReturnValue();
 		$return['currency'] = $this->context->currency;
-		
+		$return['order_states'] = $this->getOrderStates();
+		$return['order_state'] = Configuration::get("FIDDYSTORE_ORDER_STATE");
 		$tpl->assign($return);
 		
 		return $tpl->fetch();
+	}
+	
+	public function ajaxProcessSearchCustomers() 
+	{
+		$customerSearchString = Tools::getValue('customer_search');
+		$customers = $this->getCustomersBySearchString($customerSearchString);
+		
+		$return = array(
+			'customers' => $customers
+		);
+		die(Tools::jsonEncode($return));
+	}
+	
+	public function ajaxProcessSetCustomer() {
+		$customer = Tools::getValue('customer');
+		Configuration::updateValue('FIDDYSTORE_CUSTOMER', $customer['id_customer']);
+	}
+	
+	private function getCustomersBySearchString($customerSearchString) 
+	{
+		$customers = Customer::searchByName(pSQL($customerSearchString));
+		return $customers;
+	}
+	
+	public function ajaxProcessSetOrderState() {
+		$id_order_state = Tools::getValue('id_order_state');
+		Configuration::updateValue('FIDDYSTORE_ORDER_STATE', $id_order_state);
 	}
 	
 	public function ajaxProcessAddProduct()
@@ -76,7 +104,7 @@ class AdminStoresellingsController extends ModuleAdminController
 		$product = $this->getProductByBarcode($barcode);
 		$added = false;
 		
-		if(isset($product['selected_combination']) || $product['combinations'] == []) 
+		if(isset($product) && (isset($product['selected_combination']) || $product['combinations'] == [])) 
 		{
 			$this->addProductToCart($product['id_product'], $product['selected_combination']['id_product_attribute']);
 			$added = true;
@@ -192,6 +220,11 @@ class AdminStoresellingsController extends ModuleAdminController
 		return $product;
 	}
 	
+	private function getOrderStates() {
+		$id_lang = $this->context->language->id;
+		$order_states = OrderState::getOrderStates($id_lang);
+		return $order_states;
+	}
 	
 	private function getProductAttribute($id_product_attribute) {
 		return Db::getInstance(_PS_USE_SQL_SLAVE_)->executeS('
@@ -227,11 +260,15 @@ class AdminStoresellingsController extends ModuleAdminController
 			$product['image'] = (isset($image['id_image']) ? ImageManager::thumbnail(_PS_IMG_DIR_.'p/'.$image_product->getExistingImgPath().'.jpg', 'product_mini_'.(int)$product['id_product'].(isset($product['id_product_attribute']) ? '_'.(int)$product['id_product_attribute'] : '').'.jpg', 45, 'jpg') : '--');
 		}
 		
+		$id = $this->getAnonymousCustomerId();
+		$customer = new Customer($id);
+		
 		$return = array(
 			'total_price' => $total_price,
 			'cart' => $cart,
 			'discounts' => $cart->getCartRules(),
-			'products' => $products
+			'products' => $products,
+			'customer' => $customer
 		);
 		
 		return $return;
@@ -242,7 +279,7 @@ class AdminStoresellingsController extends ModuleAdminController
 		$id_lang = $this->context->language->id;
 		
 		$matching_products = Product::searchByName($id_lang, $barcode);
-		if(count($matching_products) > 0) 
+		if(count($matching_products) == 1) 
 		{
 			$product = $matching_products[0];
 			
@@ -312,7 +349,13 @@ class AdminStoresellingsController extends ModuleAdminController
 		$cartrule->active = 1;
 		$cartrule->highlight = 1;
 
-		$cartrule->reduction_amount = $discount;
+		if (strpos($discount, '%') !== FALSE) {
+			$discount = str_replace("%", "", $discount);
+			$cartrule->reduction_percent = $discount;		
+		} else {
+			$cartrule->reduction_amount = $discount;		
+		}
+		
 		$cartrule->reduction_tax = true;
 		
 		$cartrule->minimum_amount_currency = $this->context->currency->id;
@@ -333,7 +376,7 @@ class AdminStoresellingsController extends ModuleAdminController
 			$reference = Order::generateReference();
 		while (Order::getByReference($reference)->count());
 
-		$id_order_state = 13;
+		$id_order_state = Configuration::get("FIDDYSTORE_ORDER_STATE");
 
 		$order = new Order();
 		$order->product_list = $product_list;
@@ -383,9 +426,9 @@ class AdminStoresellingsController extends ModuleAdminController
 		$order->total_paid_tax_incl = (float)Tools::ps_round((float)$cart->getOrderTotal(true, Cart::BOTH, $order->product_list, $id_carrier), 2);
 		$order->total_paid = $order->total_paid_tax_incl;
 		$order->total_paid_real = $order->total_paid;
-
-		$order->invoice_date = '0000-00-00 00:00:00';
-		$order->delivery_date = '0000-00-00 00:00:00';
+		
+		$order->invoice_date = date('Y-m-d H:i:s', $now);
+		$order->delivery_date = date('Y-m-d H:i:s', $now);
 
 		// Creating order
 		$result = $order->add();
@@ -402,15 +445,13 @@ class AdminStoresellingsController extends ModuleAdminController
 	}
 	
 	private function getAnonymousCustomerId() {
-		$anonymousArray = Customer::getCustomersByEmail('info@fiddy-store.ch');
-		$anonymous = array_shift($anonymousArray);
-		return $anonymous['id_customer'];
+		return Configuration::get('FIDDYSTORE_CUSTOMER');
 	}
 	
 	private function getAnonymousCustomerSecureKey() {
-		$anonymousArray = Customer::getCustomersByEmail('info@fiddy-store.ch');
-		$anonymous = array_shift($anonymousArray);
-		return $anonymous['secure_key'];	
+		$id = $this->getAnonymousCustomerId();
+		$customer = new Customer($id);
+		return $customer->secure_key;	
 	}
 	
 	private function getAnonymousAddressId() {
